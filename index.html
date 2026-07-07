@@ -1,0 +1,209 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Resume Analyzer</title>
+<style>
+  :root {
+    --ink: #1b1f23;
+    --paper: #fafafa;
+    --line: #d8dbe0;
+    --accent: #2f6f4f;
+    --accent-soft: #e7f0ea;
+    --danger: #b3432b;
+    --warn: #b3852b;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    font-family: 'Georgia', 'Times New Roman', serif;
+    background: var(--paper);
+    color: var(--ink);
+  }
+  .wrap { max-width: 760px; margin: 0 auto; padding: 48px 24px 96px; }
+  h1 {
+    font-size: 28px;
+    font-weight: 600;
+    letter-spacing: -0.01em;
+    margin: 0 0 4px;
+  }
+  .sub {
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+    color: #6b7178;
+    font-size: 14px;
+    margin: 0 0 32px;
+  }
+  form {
+    border: 1px solid var(--line);
+    border-radius: 4px;
+    padding: 24px;
+    background: white;
+  }
+  label {
+    display: block;
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+    font-size: 13px;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    color: #6b7178;
+    margin-bottom: 8px;
+  }
+  input[type="file"], textarea {
+    width: 100%;
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+    font-size: 14px;
+    padding: 10px;
+    border: 1px solid var(--line);
+    border-radius: 3px;
+    margin-bottom: 20px;
+    resize: vertical;
+  }
+  textarea { min-height: 100px; }
+  button {
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+    font-size: 14px;
+    font-weight: 600;
+    background: var(--accent);
+    color: white;
+    border: none;
+    padding: 12px 20px;
+    border-radius: 3px;
+    cursor: pointer;
+  }
+  button:disabled { opacity: 0.5; cursor: not-allowed; }
+  #result { margin-top: 32px; }
+  .card {
+    border: 1px solid var(--line);
+    border-radius: 4px;
+    padding: 20px;
+    margin-bottom: 16px;
+    background: white;
+  }
+  .card h2 {
+    font-size: 15px;
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    color: #6b7178;
+    margin: 0 0 12px;
+  }
+  .score {
+    font-size: 40px;
+    font-weight: 700;
+    color: var(--accent);
+  }
+  .issue {
+    border-left: 3px solid var(--warn);
+    padding: 8px 12px;
+    margin-bottom: 8px;
+    background: #fdf8ee;
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+    font-size: 13px;
+  }
+  .issue.high { border-color: var(--danger); background: #fbeeeb; }
+  .tag {
+    display: inline-block;
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+    font-size: 12px;
+    background: var(--accent-soft);
+    color: var(--accent);
+    padding: 3px 8px;
+    border-radius: 3px;
+    margin: 0 6px 6px 0;
+  }
+  #status {
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+    font-size: 13px;
+    color: #6b7178;
+    margin-top: 12px;
+  }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>Resume Analyzer</h1>
+  <p class="sub">Upload a resume for structured feedback and optional job-match scoring.</p>
+
+  <form id="analyzeForm">
+    <label for="resume">Resume file (PDF, DOCX, or TXT)</label>
+    <input type="file" id="resume" name="resume" accept=".pdf,.docx,.txt" required />
+
+    <label for="jd">Job description (optional)</label>
+    <textarea id="jd" name="job_description" placeholder="Paste the job description to get a fit score..."></textarea>
+
+    <button type="submit" id="submitBtn">Analyze Resume</button>
+    <div id="status"></div>
+  </form>
+
+  <div id="result"></div>
+</div>
+
+<script>
+const form = document.getElementById('analyzeForm');
+const status = document.getElementById('status');
+const submitBtn = document.getElementById('submitBtn');
+const resultEl = document.getElementById('result');
+
+form.addEventListener('submit', async (e) => {
+  e.preventDefault();
+  resultEl.innerHTML = '';
+  status.textContent = 'Analyzing... this can take 10-20 seconds.';
+  submitBtn.disabled = true;
+
+  const formData = new FormData();
+  formData.append('resume', document.getElementById('resume').files[0]);
+  const jd = document.getElementById('jd').value.trim();
+  if (jd) formData.append('job_description', jd);
+
+  try {
+    const res = await fetch('/analyze', { method: 'POST', body: formData });
+    if (!res.ok) {
+      const err = await res.json();
+      throw new Error(err.detail || 'Request failed');
+    }
+    const data = await res.json();
+    render(data);
+    status.textContent = '';
+  } catch (err) {
+    status.textContent = 'Error: ' + err.message;
+  } finally {
+    submitBtn.disabled = false;
+  }
+});
+
+function render(data) {
+  const p = data.profile;
+  const q = data.quality;
+  const jd = data.jd_match;
+
+  let html = `
+    <div class="card">
+      <h2>Profile</h2>
+      <p><strong>${p.name || 'Unknown'}</strong> — ${p.total_years_experience ?? '?'} yrs experience</p>
+      ${p.skills.map(s => `<span class="tag">${s}</span>`).join('')}
+    </div>
+    <div class="card">
+      <h2>Quality Score</h2>
+      <div class="score">${q.overall_score}/100</div>
+      ${q.issues.map(i => `<div class="issue ${i.severity === 'high' ? 'high' : ''}"><strong>${i.category}:</strong> ${i.description}<br><em>${i.suggestion}</em></div>`).join('')}
+    </div>
+  `;
+
+  if (jd) {
+    html += `
+      <div class="card">
+        <h2>Job Match</h2>
+        <div class="score">${jd.fit_score}/100</div>
+        <p>${jd.summary}</p>
+        <p><strong>Matched:</strong> ${jd.matched_keywords.map(k => `<span class="tag">${k}</span>`).join('')}</p>
+        <p><strong>Missing:</strong> ${jd.missing_keywords.map(k => `<span class="tag">${k}</span>`).join('')}</p>
+      </div>
+    `;
+  }
+
+  resultEl.innerHTML = html;
+}
+</script>
+</body>
+</html>
